@@ -1,0 +1,22 @@
+variables:
+  REGISTRY: docker-registry.turbulent.ca:5000
+  IMAGE: heap-mysql
+
+stages:
+  - build
+  - push
+
+# Run the build always, to see if it works
+build-image:
+  stage: build
+  script:
+    - docker build -t ${REGISTRY}/${IMAGE}:${CI_BUILD_REF_NAME} .
+
+# Only push to docker-registry on tags
+push-image:
+  stage: push
+  script:
+    - docker build -t ${REGISTRY}/${IMAGE}:${CI_BUILD_REF_NAME} .
+    - docker push ${REGISTRY}/${IMAGE}:${CI_BUILD_REF_NAME}
+  only:
+    - tags
