@@ -1,0 +1,256 @@
+#!/usr/bin/python
+import sys
+import traceback
+import os.path
+import logging
+import re
+import yaml
+
+from optparse import OptionParser
+from pprint import pprint
+from datetime import datetime
+from subprocess import Popen, check_output, CalledProcessError
+
+class Replicactl(object):
+
+  def __init__(self):
+    os.chdir(os.path.dirname(__file__))
+    return
+
+  def setupLogging(self):
+    log_level = logging.DEBUG if self.options.debug else logging.INFO 
+    logging.basicConfig(format='%(message)s', level=log_level)
+
+  def getShellOptions(self):
+    parser = OptionParser(usage="usage: %prog COMMAND [options]")
+    parser.add_option("-d", dest="debug", help="Activate debugging logs", default=False, action="store_true")
+    return parser.parse_args()
+
+  def getUsage(self):
+    usage = """
+Usage: replicactl COMMAND [options] 
+
+replicactl - MySQL replication control.
+
+Options:
+  -d		Activate debugging logs
+
+Commands:
+  master-status		Display the MySQL replica master status.
+  master-reset		Reset the replica master.
+  master-slaves		List MySQL slaves on this master.
+  slave-status		Display the MySQL slave status
+  slave-check		Run a slave check 
+  slave-init		Initialize the slave replication with a logfile and a log position.
+  slave-start		Start the slave threads.
+  slave-stop		Stop the slave threads.
+  slave-reset		Reset the slave threads.
+"""
+    return usage
+
+  def exitWithHelp(self, msg):
+    logging.info(self.getUsage())
+    logging.info("")
+    logging.info(msg)
+    sys.exit(1)
+
+  def run(self):
+    (self.options,self.args) = self.getShellOptions()
+
+    self.setupLogging()
+
+    if not len(self.args) > 0:
+      self.exitWithHelp("Please provide a command.")
+
+    self.command = self.args[0]
+
+    try:
+      commandCallback = self.commandMap( self.command )
+    except Exception as err:
+      sys.exit("Unknown command: %s" % self.command)
+
+    try:
+      commandCallback()
+    except Exception as err:
+      logging.error(traceback.format_exc())
+      sys.exit("Error running command %s: %s" % (self.command, err))
+
+
+  def commandMap(self, x):
+    return {
+      'help': self.help,
+      'master-status': self.cmdMasterStatus,
+      'master-slaves': self.cmdMasterSlaves,
+      'master-reset': self.cmdMasterReset,
+      'slave-status': self.cmdSlaveStatus,
+      'slave-check': self.cmdSlaveCheck,
+      'slave-init':  self.cmdSlaveInit,
+      'slave-start': self.cmdSlaveStart,
+      'slave-stop': self.cmdSlaveStop,
+      'slave-reset': self.cmdSlaveReset,
+    }[x]
+
+
+  def printConfirm(self, msg):
+    if self.options.assume_yes:
+      return True
+    print(msg)
+    res = raw_input('Proceed? [N/y] ')
+    if not res.lower().startswith('y'):
+      return False
+    print('... proceeding')
+    return True
+
+  def runSysCommand(self, cmd):
+    logging.debug("COMMAND: %s" % cmd)
+    try:
+      out = check_output(cmd, shell=True)
+      return ( 0, out.strip() )
+    except CalledProcessError as err:
+      return ( err.returncode, err.output )
+      
+  def ensurelist(self, v):
+    if v:
+      return [ x for x in (v if isinstance(v, (list, tuple)) else [v]) ]
+    else:
+      return []
+      
+  def quote(self,string):
+    subject = str(string)
+    if re.match(r'^.*["]+.*$', subject):
+      return '"' + subject.replace('"','\\"') + '"'
+    elif re.match(r"^.*[\s'&]+.*$", subject):
+      return '"' + subject + '"'
+    return '"' + subject + '"'
+
+  def help(self):
+    self.exitWithHelp(" ")
+
+  ### Commands ###
+
+  def cmdMasterStatus(self):
+    status = self.runSysCommand("mysql -e 'SHOW MASTER STATUS \\G'")
+    if(status[0] != 0):
+      logging.error("An error occured checking status: %s" % status[1])
+      sys.exit(1)
+    logging.info("%s" % status[1])
+
+  def cmdMasterSlaves(self):
+    status = self.runSysCommand("mysql -e 'SHOW SLAVE HOSTS \\G'")
+    if(status[0] != 0):
+      logging.error("An error occured checking status: %s" % status[1])
+      sys.exit(1)
+    logging.info("%s" % status[1])
+
+  def cmdMasterReset(self):
+    status = self.runSysCommand("mysql -e 'RESET MASTER'")
+    if(status[0] != 0):
+      logging.error("An error occured resetting master: %s" % status[1])
+      sys.exit(1)
+    logging.info("%s" % status[1])
+    logging.info("OK.")
+
+  def cmdSlaveInit(self):
+    if not len(self.args) >= 3:
+      logging.error("You must supply a logfile and log position for init.")
+      logging.error("Usage: init mylogfile-0001.bin LOGPOS")
+      return sys.exit(1)
+
+    logfile = self.args[1]
+    logpos = self.args[2]
+
+    cmd = self.runSysCommand("mysql -e \"CHANGE MASTER TO MASTER_LOG_FILE='%s', MASTER_LOG_POS=%s\"" % (logfile, logpos))
+    if(cmd[0] != 0):
+      logging.error("An error occured initializing slave: %s" % cmd[1])
+      sys.exit(1)
+    logging.info("%s" % cmd[1])
+ 
+  def cmdSlaveStatus(self):
+    status = self.runSysCommand("mysql -e 'SHOW SLAVE STATUS \\G'")
+    if(status[0] != 0):
+      logging.error("An error occured checking status: %s" % status[1])
+      sys.exit(1)
+    logging.info("%s" % status[1])
+
+  def cmdSlaveStart(self):
+    status = self.runSysCommand("mysql -e 'START SLAVE'")
+    if(status[0] != 0):
+      logging.error("An error occured starting slave: %s" % status[1])
+      sys.exit(1)
+    logging.info("%s" % status[1])
+    logging.info("OK.")
+
+  def cmdSlaveStop(self):
+    status = self.runSysCommand("mysql -e 'STOP SLAVE'")
+    if(status[0] != 0):
+      logging.error("An error occured stopping slave: %s" % status[1])
+      sys.exit(1)
+    logging.info("%s" % status[1])
+    logging.info("OK.")
+ 
+  def cmdSlaveReset(self):
+    status = self.runSysCommand("mysql -e 'RESET SLAVE'")
+    if(status[0] != 0):
+      logging.error("An error occured resetting slave: %s" % status[1])
+      sys.exit(1)
+    logging.info("%s" % status[1])
+    logging.info("OK.")
+
+  def cmdSlaveCheck(self):
+    status = self.runSysCommand("mysql -e 'SHOW SLAVE STATUS \\G'")
+    if(status[0] != 0):
+      logging.error("An error occured checking status: %s" % status[1])
+      sys.exit(1)
+
+    slave_io = False
+    slave_sql = False
+    sbm = None
+    last_error = None
+
+    output = status[1]
+    match = re.search(r'Slave_IO_Running: (.*)$', output, re.M)
+    if match and match.group(1) == "Yes":
+      slave_io = True
+
+    match = re.search(r'Slave_SQL_Running: (.*)$', output, re.M)
+    if match and match.group(1) == "Yes":
+      slave_sql = True
+      
+    match = re.search(r'Seconds_Behind_Master: (.*)$', output, re.M)
+    if match and match.group(1) != 'NULL':
+      sbm = int(match.group(1))
+
+    match = re.search(r'Last_Error: (.*)$', output, re.M)
+    if match and match.group(1) != "":
+      last_error = match.group(1)
+
+    logging.info("Slave_IO: %d" % slave_io)
+    logging.info("Slave_SQL: %d" % slave_sql)
+    logging.info("Seconds behind master: %s" % sbm)
+    logging.info("Last error: %s" % last_error)
+
+    status = 0 
+    notice = ""
+    if not slave_io:
+      notice += "Slave_IO thread is not running. "
+      status = 1
+    if not slave_sql:
+      notice += "Slave_SQL thread is not running. "
+      status = 1
+    if sbm >= 60:
+      notice += "Slave is behind master by more than a minute."
+      status = 1
+
+    logging.info("")
+    if status != 0: 
+      logging.error("NOT OK - Fault detected: %s" % notice)
+    else:
+      logging.info("OK")
+
+    sys.exit(status)
+
+#If we are in main context, then we are running
+if __name__=='__main__':
+  prog = Replicactl()
+  prog.run()
+

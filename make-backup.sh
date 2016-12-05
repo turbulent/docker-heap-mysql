@@ -1,0 +1,190 @@
+#!/bin/bash
+
+TMPFILE="/tmp/innobackupex-runner.$$.tmp"
+USEROPTIONS=""
+FILTERTABLES="--include=.*[.].*"
+BACKDIR=/vol/database/`hostname`-mysql-backups
+BASEBACKDIR=$BACKDIR/base
+INCRBACKDIR=$BACKDIR/incr
+START=`date +%s`
+KEEP=$2 #How many backups to keep apart from the one being incremented
+FULLBACKUPLIFE=$3 #How long to keep incrementing a backup for, minimum 60
+
+if [ -z $KEEP ]; then
+  KEEP=1
+fi
+
+if [ -z $FULLBACKUPLIFE ]; then
+  FULLBACKUPLIFE=3600
+fi
+
+
+ensuredir () {
+  # Check base dir exists and is writable
+  DIR=$1
+  if test ! -d $DIR ; then
+    mkdir -p $DIR
+    if [ $? -ne 0 ]; then
+      echo $1 'does not exist  and cannot be created'; echo
+      exit 1
+    fi
+  fi
+   
+  if test ! -w $DIR ; then
+    echo $DIR 'does not exist or is not writable'; echo
+    exit 1
+  fi
+}
+
+ 
+function systemcheck () {
+
+  echo "Systems check..."
+ 
+  ensuredir $BASEBACKDIR
+  ensuredir $INCRBACKDIR
+
+  if [ -z "`mysqladmin $USEROPTIONS status | grep 'Uptime'`" ]
+  then
+    echo "HALTED: MySQL does not appear to be running."; echo
+    exit 1
+  fi
+   
+  if ! `echo 'exit' | /usr/bin/mysql -s $USEROPTIONS`
+  then
+    echo "HALTED: Supplied mysql username or password appears to be incorrect (not copied here for security, see script)"; echo
+    exit 1
+  fi
+   
+  echo "Check completed OK"
+}
+
+
+function find_latest_full () {
+  echo `find $BASEBACKDIR -mindepth 1 -maxdepth 1 -type d -printf "%P\n" | sort -nr | head -1`
+}
+
+function find_latest_incremental() {
+  echo `find $INCRBACKDIR/$LATEST -mindepth 1  -maxdepth 1 -type d | sort -nr | head -1`
+}
+
+function make_full () {
+  echo 'New full backup'
+
+  # Create a new full backup
+  runinnobackupex $USEROPTIONS $FILTERTABLES $BASEBACKDIR 
+  
+  LATEST=$(find_latest_full)
+  if [ -n $LATEST ]
+  then
+    echo "Preparing backup: $LATEST"
+    runinnobackupex --apply-log $USEROPTIONS $FILTERTABLES $BASEBACKDIR/$LATEST > $TMPFILE 2>&1
+    THISBACKUP=`awk -- "/Backup created in directory/ { split( \\\$0, p, \"'\" ) ; print p[2] }" $TMPFILE`
+    echo "Databases backed up successfully to: $THISBACKUP"
+    echo
+  fi
+}
+
+function make_incremental () {
+ 
+  LATEST=$(find_latest_full)
+  AGE=`stat -c %Y $BASEBACKDIR/$LATEST`
+   
+  if [ "$LATEST" -a `expr $AGE + $FULLBACKUPLIFE + 5` -ge $START ]
+  then
+    echo 'New incremental backup'
+    # Create an incremental backup
+   
+    # Check incr sub dir exists
+    # try to create if not
+    ensuredir $INCRBACKDIR/$LATEST
+
+    LATESTINCR=$(find_latest_incremental)
+    if [ ! $LATESTINCR ]
+    then
+      # This is the first incremental backup
+      INCRBASEDIR=$BASEBACKDIR/$LATEST
+    else
+      # This is a 2+ incremental backup
+      INCRBASEDIR=$LATESTINCR
+    fi
+   
+    # Create incremental Backup
+    innobackupex $USEROPTIONS $FILTERTABLES --incremental $INCRBACKDIR/$LATEST --incremental-basedir=$INCRBASEDIR > $TMPFILE 2>&1
+
+    if [ -z "`tail -1 $TMPFILE | grep 'completed OK!'`" ]
+    then
+      echo "$INNOBACKUPEX failed:"; echo
+      echo "---------- ERROR OUTPUT from $INNOBACKUPEX ----------"
+      cat $TMPFILE
+      rm -f $TMPFILE
+      exit 1
+    fi
+     
+    THISBACKUP=`awk -- "/Backup created in directory/ { split( \\\$0, p, \"'\" ) ; print p[2] }" $TMPFILE`
+     
+    echo "Databases backed up successfully to: $THISBACKUP"
+    echo
+  else
+    make_full
+  fi
+}
+
+
+function runinnobackupex () {
+  innobackupex $* > $TMPFILE 2>&1
+  if [ -z "`tail -1 $TMPFILE | grep 'completed OK!'`" ]
+  then
+     echo "$INNOBACKUPEX failed:"; echo
+     echo "---------- ERROR OUTPUT from $INNOBACKUPEX ----------"
+     cat $TMPFILE
+     rm -f $TMPFILE
+     exit 1
+  fi
+}
+
+echo "----------------------------"
+echo
+echo "run-backup.sh: MySQL backup script"
+echo "started: `date`"
+echo
+
+systemcheck
+
+echo
+
+case $1 in 
+  full)
+    make_full
+    ;;
+  incremental)
+    make_incremental
+    ;;
+  *)
+    echo "Usage: run-backup.sh full|incremental KEEP FULLBACKUPLIFE"
+    echo "Sample: run-backup.sh incremental 5 86400"
+    echo "Sample: run-backup.sh full"
+    echo
+    exit 1
+    ;;
+esac
+
+
+MINS=$(($FULLBACKUPLIFE * ($KEEP + 1 ) / 60))
+echo "Cleaning up old backups (older than $MINS minutes) and temporary files"
+ 
+# Delete tmp file
+rm -f $TMPFILE
+# Delete old bakcups
+for DEL in `find $BASEBACKDIR -mindepth 1 -maxdepth 1 -type d -mmin +$MINS -printf "%P\n"`
+do
+  echo "Deleting backup: $DEL"
+  rm -rf $BASEBACKDIR/$DEL
+  rm -rf $INCRBACKDIR/$DEL
+done
+ 
+SPENT=$(((`date +%s` - $START) / 60))
+echo
+echo "Took $SPENT minutes"
+echo "Completed: `date`"
+exit 0

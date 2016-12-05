@@ -1,0 +1,90 @@
+[mysqld]
+bind-address=0.0.0.0
+
+user            = heap
+pid-file        = /tmp/mysqld.pid
+socket          = /tmp/mysqld.sock
+port            = 3306
+basedir         = /usr
+datadir = /vol/database/{{HOSTNAME}}-mysql
+tmpdir          = /vol/database/{{HOSTNAME}}-mysql-tmp
+lc-messages-dir = /usr/share/mysql
+skip-external-locking
+
+#Storage engine
+default-storage-engine=innodb
+
+#Logging
+log_error = /vol/logs/{{HOSTNAME}}-mysql-error.log
+
+{%- if VAR_MYSQL_SLOWLOG %}
+log_slow_queries  = /vol/logs/{{HOSTNAME}}-mysql-slow.log
+long_query_time = {{VAR_MYSQL_SLOWLOG_TIME}}
+log-queries-not-using-indexes = {{VAR_MYSQL_SLOWLOG_INDEXES}}
+{%- endif %}
+
+#Binary logging
+server-id   = {{VAR_MYSQL_SERVER_ID}}
+log_bin     = /vol/database/{{HOSTNAME}}-mysql/mysql-bin.log
+max_binlog_size         = {{VAR_MYSQL_BINLOG_SIZE}}
+binlog_format = {{VAR_MYSQL_BINLOG_FORMAT}}
+expire_logs_days               = {{VAR_MYSQL_EXPIRE_LOGS_DAYS}}
+
+#Connection tuning
+max_allowed_packet             = {{VAR_MYSQL_MAX_ALLOWED_PACKET}}
+max_connect_errors             = {{VAR_MYSQL_MAX_CONNECT_ERRORS}}
+max_connections                = {{VAR_MYSQL_MAX_CONNECTIONS}}
+
+#Engine
+thread_stack            = 192K
+thread_cache_size       = 8
+
+
+#Table tuning
+query_cache_size               = {{VAR_MYSQL_QUERY_CACHE_SIZE}}
+open_files_limit               = {{VAR_MYSQL_OPEN_FILES_LIMIT}}
+tmp_table_size                 = 32M
+max_heap_table_size            = 32M
+query_cache_limit	       = 20M
+thread_cache_size              = 100
+table_definition_cache         = 1024
+table_open_cache               = 2048
+
+#Isolation
+transaction_isolation = {{VAR_MYSQL_TRANSACTION_ISOLATION}}
+
+#MyISAM
+key_buffer_size              = 16M
+myisam-recover         = BACKUP
+
+#InnoDB
+innodb_buffer_pool_size		= {{VAR_MYSQL_INNODB_BUFFER_POOL_SIZE}}
+innodb_additional_mem_pool_size	= {{VAR_MYSQL_ADDITIONAL_MEM_POOL_SIZE}}
+innodb_log_file_size		= {{VAR_MYSQL_INNODB_LOG_FILE_SIZE}}
+innodb_log_buffer_size		= {{VAR_MYSQL_INNODB_LOG_BUFFER_SIZE}}
+innodb_flush_log_at_trx_commit	= {{VAR_MYSQL_INNODB_FLUSH_LOG_AT_TRX_COMMIT}}
+innodb_thread_concurrency=0
+innodb_flush_method=O_DIRECT
+innodb_file_per_table=1
+
+[mysqld_safe]
+socket          = /tmp/mysqld.sock
+nice            = 0
+
+[client]
+port            = 3306
+socket          = /tmp/mysqld.sock
+
+
+[mysqldump]
+quick
+quote-names
+max_allowed_packet      = 16M
+
+[mysql]
+#no-auto-rehash # faster start of mysql but no tab completition
+
+[isamchk]
+key_buffer_size              = 16M
+
+
