@@ -1,7 +1,7 @@
-FROM docker-registry.turbulent.ca:5000/heap-base:2.0.1
+FROM docker-registry.turbulent.ca:5000/heap-base:2.0.3
 MAINTAINER Benoit Beausejour <b@turbulent.ca>
 
-ENV heap-mysql 2.0.1
+ENV heap-mysql 2.0.2
 
 # Install packages
 ENV DEBIAN_FRONTEND noninteractive
