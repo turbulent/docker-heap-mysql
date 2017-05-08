@@ -3,7 +3,7 @@
 TMPFILE="/tmp/innobackupex-runner.$$.tmp"
 USEROPTIONS=""
 FILTERTABLES="--include=.*[.].*"
-BACKDIR={{VAR_MYSQL_BACKUP_DIR if VAR_MYSQL_BACKUP_DIR else "/vol/database/`hostname`-mysql-backups"}}
+BACKDIR="{{VAR_MYSQL_BACKUP_DIR if VAR_MYSQL_BACKUP_DIR else "/vol/database/`hostname`-mysql-backups"}}"
 BASEBACKDIR=$BACKDIR/base
 INCRBACKDIR=$BACKDIR/incr
 START=`date +%s`
