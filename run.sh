@@ -1,6 +1,8 @@
 #!/bin/bash 
 
 /systpl/systpl.jinja.py /systpl/my.cnf.tmpl > /etc/mysql/my.cnf
+/systpl/systpl.jinja.py /systpl/make-backup.sh.tmpl > /make-backup.sh
+chmod 755 /make-backup.sh
 
 ####
 VOLUME_HOME="/vol/database/`hostname`-mysql"

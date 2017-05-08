@@ -1,7 +1,7 @@
 FROM docker-registry.turbulent.ca:5000/heap-base:2.0.3
 MAINTAINER Benoit Beausejour <b@turbulent.ca>
 
-ENV heap-mysql 2.0.2
+ENV heap-mysql 2.1.0
 
 # Install packages
 ENV DEBIAN_FRONTEND noninteractive
@@ -19,6 +19,7 @@ ADD mysqld_charset.cnf /etc/mysql/conf.d/mysqld_charset.cnf
 ADD import_sql.sh /import_sql.sh
 ADD my.cnf.tmpl /systpl/
 ADD .my.cnf.tmpl /systpl/
+ADD make-backup.sh.tmpl /systpl/
 
 # Innotop 
 ADD https://github.com/innotop/innotop/archive/744710dd39a78a5b25096cd0dcda8ba57a7575b2.zip /tmp/innotop.zip
@@ -26,9 +27,6 @@ RUN cd /tmp/ && unzip innotop.zip && cd innotop-744710dd39a78a5b25096cd0dcda8ba5
 
 # Add entry scripts
 COPY run.sh /run.sh
-
-# ADD scripts
-COPY make-backup.sh /make-backup.sh
 
 RUN chmod 755 /*.sh
 
@@ -57,10 +55,11 @@ ENV VAR_MYSQL_USER=admin \
   VAR_MYSQL_REPLICATION_USER="replication" \
   VAR_MYSQL_REPLICATION_PASSWORD="replication" \
   VAR_MYSQL_REPLICATION_HOST="" \
-  VAR_MYSQL_REPLICATION_PORT="3306"
+  VAR_MYSQL_REPLICATION_PORT="3306" \
+  VAR_MYSQL_BACKUP_DIR=""
 
 # Add VOLUMEs to allow backup of config and databases
-VOLUME  ["/vol/logs", "/vol/database"]
+VOLUME  ["/vol/logs", "/vol/database", "/vol/backups"]
 
 ADD replicactl /replicactl
 
