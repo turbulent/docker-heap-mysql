@@ -1,6 +1,6 @@
-# heap-mysql docker image.
+# heap-mysql Docker image.
 
-Dockerized MySQL daemon as the main entrypoint.
+Dockerized MySQL daemon with Heap environment conversions.
 
 ## Usage
 
@@ -17,7 +17,8 @@ $ docker run -d -e "VAR_MYSQL_INNODB_BUFFER_POOL_SIZE=48800M" -p 3306:3306 heap-
 
 This image uses environment variables to override common configuration options.
 
-The following environment variables are available (listed below with default values):
+The following environment variables are available (listed below with default
+values):
 
 ```
 VAR_MYSQL_USER="admin"
@@ -45,4 +46,9 @@ VAR_MYSQL_TRANSACTION_ISOLATION="REPEATABLE-READ"
 
 * [replicactl](REPLICACTL.md)
 * [make-backup.sh](BACKUPS.md)
+
+## License
+
+All work found under this repository is licensed under the [Apache
+License 2.0](LICENSE).
 
