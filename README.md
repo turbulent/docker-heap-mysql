@@ -5,7 +5,7 @@ Dockerized MySQL daemon with Heap environment conversions.
 ## Usage
 
 ```
-$ docker run -d -p 3306:3306 heap-memcached 
+$ docker run -d -p 3306:3306 heap-mysql
 ```
 
 You can pass envrionment variables when launching the container:
